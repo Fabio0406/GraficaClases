@@ -6,84 +6,131 @@ using System.Text;
 using System.Threading.Tasks;
 using OpenTK.Graphics.OpenGL;
 using System.Drawing;
-using ConsoleApp1.Clases;
 using Newtonsoft.Json;
 using System.IO;
+using OpenTK.Input;
 
 namespace ConsoleApp1
 {
     public class Game : GameWindow
     {
         private Escenario Escenario1;
-        private float rotationAngle = 0.0f;
+        private Objeto T1, T2;
+        private float angulo = 0.0f;
+
+        // Variables para la cámara
+        private float cameraX = 0.0f;
+        private float cameraY = 0.0f;
+        private float cameraZ = -15.0f;
+        private float cameraRotationY = 0.0f;
+        private float cameraRotationX = 0.0f;
+
+        // Variables para control de rotación global
+        private string ejeRotacion = null;
+        private float velocidadRotacion = 1.0f;
 
         public Game() : base(800, 600) // Constructor que define el tamaño de la ventana
         {
+            Escenario1 = new Escenario(0.0f, 0.0f, 0.0f);
+
             // Leer el JSON desde el archivo
-            string json = File.ReadAllText(@"C:\Users\fabio\Documents\UAGRM\Semestre 2-2024\Grafica\ProgramGrafica-Tarea3\ConsoleApp1\escenario.txt");
+            string json = File.ReadAllText(@"C:\Users\fabio\Documents\UAGRM\Semestre 2-2024\Grafica\ProgramGrafica\ConsoleApp1\Objeto.txt");
+            T1 = JsonConvert.DeserializeObject<Objeto>(json);
+            T2 = JsonConvert.DeserializeObject<Objeto>(json);
 
-            // Deserializar el JSON en el objeto Escenario1
-            Escenario1 = JsonConvert.DeserializeObject<Escenario>(json);
-
-            // Serializa el escenario
-            //SerializarEscenario(@"C:\Users\fabio\Documents\UAGRM\Semestre 2-2024\Grafica\ProgramGrafica-Tarea3\ConsoleApp1\escenario.txt");
-        }
-
-        private void SerializarEscenario(string filePath)
-        {
-            try
-            {
-                // Serializar el escenario a formato JSON
-                string json = JsonConvert.SerializeObject(Escenario1, Formatting.Indented);
-
-                // Guardar el JSON en un archivo .txt
-                File.WriteAllText(filePath, json);
-
-                Console.WriteLine("Escenario serializado exitosamente en: " + filePath);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error serializando el escenario: " + ex.Message);
-            }
+            Escenario1.AgregarObjeto("T1", T1);
+            Escenario1.AgregarObjeto("T2", T2);
         }
 
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
             GL.ClearColor(Color.FromArgb(0, 100, 0));
-            GL.Enable(EnableCap.DepthTest); // Profundidad
+            GL.Enable(EnableCap.DepthTest); // Habilitar prueba de profundidad
         }
 
         protected override void OnUpdateFrame(FrameEventArgs e)
         {
             base.OnUpdateFrame(e);
-            rotationAngle += 6.5f * (float)e.Time; // Rotación
+            ProcesarEntrada(); // Consolidamos la lógica de entrada en un método
+        }
+
+        private void ProcesarEntrada()
+        {
+            var state = Keyboard.GetState(); // Obtenemos el estado del teclado una vez para evitar redundancia
+
+            // Rotación global de todos los objetos
+            if (state.IsKeyDown(OpenTK.Input.Key.X)) ejeRotacion = "x";
+            else if (state.IsKeyDown(OpenTK.Input.Key.Y)) ejeRotacion = "y";
+            else if (state.IsKeyDown(OpenTK.Input.Key.Z)) ejeRotacion = "z";
+
+            if (!string.IsNullOrEmpty(ejeRotacion))
+            {
+                Escenario1.Rotar(ejeRotacion, velocidadRotacion);
+            }
+
+            // Control de la cámara
+            if (state.IsKeyDown(OpenTK.Input.Key.Left)) cameraRotationY -= 1.0f;
+            if (state.IsKeyDown(OpenTK.Input.Key.Right)) cameraRotationY += 1.0f;
+            if (state.IsKeyDown(OpenTK.Input.Key.Up)) cameraRotationX -= 1.0f;
+            if (state.IsKeyDown(OpenTK.Input.Key.Down)) cameraRotationX += 1.0f;
+            if (state.IsKeyDown(OpenTK.Input.Key.W)) cameraZ += 0.2f;
+            if (state.IsKeyDown(OpenTK.Input.Key.S)) cameraZ -= 0.2f;
         }
 
         protected override void OnRenderFrame(FrameEventArgs e)
         {
             base.OnRenderFrame(e);
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+
+            ConfigurarProyeccion();
+            ConfigurarVista();
+
+            // Dibuja el escenario y aplica transformaciones a los objetos
+            DibujarEscenario();
+
+            SwapBuffers();
+        }
+
+        private void ConfigurarProyeccion()
+        {
             GL.MatrixMode(MatrixMode.Projection);
             GL.LoadIdentity();
             GL.Frustum(-1.0, 1.0, -1.0, 1.0, 1.0, 100.0); // Proyección perspectiva
+        }
+
+        private void ConfigurarVista()
+        {
             GL.MatrixMode(MatrixMode.Modelview);
             GL.LoadIdentity();
 
-            // Posiciona y orienta la cámara
-            GL.Translate(0.0f, 0.0f, -15.0f); // Mueve la cámara hacia atrás
-            GL.Rotate(0.0f, 1.0f, 0.0f, 0.0f); // Inclina la vista hacia abajo
-            GL.Rotate(40.0f + rotationAngle, 0.0f, 1.0f, 0.0f); // Rota la vista hacia un ángulo lateral
+            // Aplica la traslación y rotación de la cámara
+            GL.Translate(cameraX, cameraY, cameraZ);
+            GL.Rotate(cameraRotationX, 1.0f, 0.0f, 0.0f); // Rotación en X
+            GL.Rotate(cameraRotationY, 0.0f, 1.0f, 0.0f); // Rotación en Y
+        }
+
+        private void DibujarEscenario()
+        {
+            // Rotación y transformación de los objetos
+            T1.get("Superior").Rotar("z",angulo);
+            T1.Trasladar(0, 0, 6);
+            T1.Escalar((float)0.5);
+
+            T2.Trasladar(5, 0, -3);
+            T2.Escalar((float)0.5);
+            //T2.Rotar("x", angulo);
 
             Escenario1.Dibujar();
 
-            SwapBuffers();
+            angulo += 1f;
+            if (angulo > 360f) angulo = 0.0f; // Resetear el ángulo si sobrepasa 360
         }
 
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
-            GL.Viewport(0, 0, Width, Height);
+            GL.Viewport(0, 0, Width, Height); // Ajustar el viewport al tamaño de la ventana
         }
     }
 }

@@ -13,7 +13,7 @@ namespace ConsoleApp1
         {
             using (Game game = new Game())
             {
-                game.Run(60.0); // Ejecutar el juego con un framerate objetivo de 60 FPS
+                game.Run(60.0);
             }
         }
     }
